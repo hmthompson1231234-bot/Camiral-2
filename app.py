@@ -1,55 +1,66 @@
 import streamlit as st
 import pandas as pd
+import threading
 
-# Set up the app UI to be wider and mobile-friendly
 st.set_page_config(page_title="Camiral Invitational '26", layout="centered", initial_sidebar_state="collapsed")
 
-# --- CUSTOM MASTERS/CAMIRAL CSS ---
+# --- BULLETPROOF MASTERS CSS ---
 st.markdown("""
 <style>
-    /* Main background */
-    .stApp {
-        background-color: #F8F9FA;
+    /* Force overall background to crisp white */
+    .stApp { background-color: #F8F9FA !important; }
+    
+    /* Fix invisible text (forces all standard text to dark grey) */
+    .stMarkdown p, .stExpander p, label, .stRadio div { color: #2C3E50 !important; font-weight: 500; }
+    
+    /* Typography - Augusta Green Headers */
+    h1, h2, h3 { color: #005A34 !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 700; }
+    h1 { border-bottom: 3px solid #EAD15F !important; padding-bottom: 10px; }
+    
+    /* Fix Dark Input Boxes & Dropdowns */
+    .stTextInput input, .stNumberInput input, div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        color: #111111 !important;
+        border: 1px solid #005A34 !important;
+        border-radius: 4px !important;
     }
-    /* Masters Green typography */
-    h1, h2, h3, p, span {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }
-    h1 {
-        color: #005A34 !important; 
-        font-weight: 700;
-        text-align: center;
-        border-bottom: 2px solid #005A34;
-        padding-bottom: 10px;
-    }
-    h2, h3 {
-        color: #005A34 !important;
-    }
-    /* Custom Button Styling */
-    .stButton>button {
-        background-color: #005A34;
-        color: white;
-        border-radius: 4px;
-        border: none;
-        font-weight: bold;
+    
+    /* Master's Green Buttons */
+    .stButton>button { 
+        background-color: #005A34 !important; 
+        color: white !important; 
+        border-radius: 6px !important; 
+        font-weight: bold !important; 
+        border: 1px solid #005A34 !important;
         width: 100%;
     }
-    .stButton>button:hover {
-        background-color: #003F24;
-        color: white;
+    .stButton>button:active {
+        background-color: #EAD15F !important;
+        color: #005A34 !important;
     }
-    /* Danger Button for Bullshit */
-    .btn-danger>button {
-        background-color: #D32F2F !important;
-    }
-    /* Table Styling */
-    [data-testid="stDataFrame"] {
-        background-color: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
+    
+    /* Red Bullshit Button */
+    .stButton:last-of-type>button { background-color: #D32F2F !important; border-color: #D32F2F !important; }
+    
+    /* Clean Table Styling */
+    [data-testid="stDataFrame"] { background-color: #FFFFFF !important; border-radius: 8px; border: 1px solid #005A34; }
 </style>
 """, unsafe_allow_html=True)
+
+# --- SECURITY PIN ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("<h2 style='text-align: center; color: #005A34;'>🔒 Enter PIN</h2>", unsafe_allow_html=True)
+    pin = st.text_input("Access Code", type="password", placeholder="Hint: Four letter warning...")
+    if st.button("Unlock Scorecard"):
+        if pin.upper() == "FORE":
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("🚨 Incorrect PIN.")
+    st.stop()
 
 # --- COURSE & PLAYER DATA ---
 HOLES = list(range(1, 19))
@@ -57,24 +68,25 @@ PARS = [4, 3, 4, 4, 5, 4, 5, 3, 4,  5, 3, 4, 4, 3, 5, 3, 4, 5]
 SIS  = [14, 18, 6, 2, 16, 12, 8, 4, 10,  9, 7, 11, 1, 13, 5, 17, 3, 15]
 
 PLAYERS = {
-    "Tommy": {"hcp": 14, "group": 1},
-    "Hidde": {"hcp": 15, "group": 1},
-    "Weeman": {"hcp": 20, "group": 1},
-    "Brad": {"hcp": 22, "group": 1},
-    "Harry": {"hcp": 14, "group": 2},
-    "James": {"hcp": 16, "group": 2},
-    "Ted": {"hcp": 22, "group": 2}
+    "Tommy": {"hcp": 14, "group": 1}, "Hidde": {"hcp": 15, "group": 1},
+    "Weeman": {"hcp": 20, "group": 1}, "Brad": {"hcp": 22, "group": 1},
+    "Harry": {"hcp": 14, "group": 2}, "James": {"hcp": 16, "group": 2}, "Ted": {"hcp": 22, "group": 2}
 }
 
 @st.cache_resource
 def get_score_db():
     cols = HOLES + ['bullshit']
-    return pd.DataFrame(index=list(PLAYERS.keys()), columns=cols).fillna(0)
+    return {
+        "lock": threading.Lock(), 
+        "data": pd.DataFrame(index=list(PLAYERS.keys()), columns=cols).fillna(0)
+    }
 
-db = get_score_db()
+db_wrapper = get_score_db()
+db = db_wrapper["data"]
+db_lock = db_wrapper["lock"]
 
 def calc_stableford(player, hole, gross):
-    if gross == 0:
+    if gross <= 0:
         return 0
     hcp = PLAYERS[player]["hcp"]
     par = PARS[hole-1]
@@ -85,12 +97,11 @@ def calc_stableford(player, hole, gross):
 
 # --- APP HEADER ---
 st.title("⛳️ CAMIRAL INVITATIONAL")
-st.markdown("<p style='text-align: center; color: #555;'>Tour Course (Yellow Tees) • Live Scoring</p>", unsafe_allow_html=True)
 
 with st.expander("📖 How to use this app (Read First)"):
     st.write("""
-    **1. Scoring:** Go to the 'Scorecard' tab. Select your group, select the hole, and log the gross strokes for everyone in your group. The app handles the Stableford math based on your handicaps.
-    **2. Leaderboard:** Check the 'Leaderboard' tab for the live standings. It calculates your 'THRU' (holes played) automatically. Hit the Refresh button to pull the other group's scores!
+    **1. Scoring:** Select your group, select the hole, and log the gross strokes. The app handles the Stableford math based on your handicaps.
+    **2. Leaderboard:** Check the 'Leaderboard' tab for the live standings. Hit the Refresh button to pull the other group's scores!
     **3. The BS Button:** If someone cheats, go to the bottom of the Scorecard tab and smash the red button.
     """)
 
@@ -98,33 +109,31 @@ tab1, tab2, tab3 = st.tabs(["📝 Scorecard", "🏆 Leaderboard", "⛳️ Course
 
 # --- SCORECARD TAB ---
 with tab1:
-    st.subheader("Group Scoring")
     col1, col2 = st.columns(2)
     selected_group = col1.radio("Select Group", [1, 2], horizontal=True)
     selected_hole = col2.selectbox("Select Hole", HOLES)
-    
     group_players = [p for p, data in PLAYERS.items() if data["group"] == selected_group]
     
     with st.form("score_form"):
-        st.markdown(f"**Hole {selected_hole}** | Par {PARS[selected_hole-1]} | Stroke Index {SIS[selected_hole-1]}")
+        st.markdown(f"**Hole {selected_hole}** | Par {PARS[selected_hole-1]} | SI {SIS[selected_hole-1]}")
         scores = {}
         for p in group_players:
             current_score = db.at[p, selected_hole]
             val = int(current_score) if current_score > 0 else PARS[selected_hole-1]
-            scores[p] = st.number_input(f"{p}'s Gross Score", min_value=1, max_value=15, value=val)
+            scores[p] = st.number_input(f"{p}'s Gross Score", min_value=1, max_value=20, value=val)
         
         if st.form_submit_button("SAVE SCORES"):
-            for p, s in scores.items():
-                db.at[p, selected_hole] = s
-            st.success(f"Scores locked in for Hole {selected_hole}!")
+            with db_lock:
+                for p, s in scores.items():
+                    db.at[p, selected_hole] = s
+            st.success(f"Scores safely locked for Hole {selected_hole}!")
             
     st.markdown("---")
-    
-    st.subheader("🚨 Penalty & Infractions")
-    st.write("Call out fake scores here. It stays on the leaderboard forever.")
+    st.markdown("### 🚨 Penalty & Infractions")
     bs_player = st.selectbox("Who is talking bullshit?", list(PLAYERS.keys()))
     if st.button(f"CALL BULLSHIT ON {bs_player.upper()}"):
-        db.at[bs_player, 'bullshit'] += 1
+        with db_lock:
+            db.at[bs_player, 'bullshit'] += 1
         st.error(f"🚨 OFFICIAL RULING: BULLSHIT CALLED ON {bs_player.upper()}! 🚨")
 
 # --- LEADERBOARD TAB ---
@@ -132,45 +141,31 @@ with tab2:
     if st.button("🔄 REFRESH LEADERBOARD"):
         st.rerun()
         
-    st.subheader("Tournament Leaderboard")
-    
     leaderboard = []
     points_dict = {}
     
-    for player in PLAYERS.keys():
-        total_points = 0
-        holes_played = 0
-        for hole in HOLES:
-            gross = db.at[player, hole]
-            if gross > 0:
-                total_points += calc_stableford(player, hole, gross)
-                holes_played += 1
-                
-        points_dict[player] = total_points
-        bs_count = db.at[player, 'bullshit']
+    with db_lock:
+        for player in PLAYERS.keys():
+            total_points = 0
+            holes_played = 0
+            for hole in HOLES:
+                gross = db.at[player, hole]
+                if gross > 0:
+                    total_points += calc_stableford(player, hole, gross)
+                    holes_played += 1
+                    
+            points_dict[player] = total_points
+            leaderboard.append({
+                "PLAYER": player, "PTS": total_points,
+                "THRU": str(holes_played) if holes_played < 18 else "F",
+                "HCP": PLAYERS[player]["hcp"], "BS 🚨": int(db.at[player, 'bullshit'])
+            })
         
-        thru_str = str(holes_played) if holes_played < 18 else "F"
-        
-        leaderboard.append({
-            "PLAYER": player, 
-            "PTS": total_points,
-            "THRU": thru_str,
-            "HCP": PLAYERS[player]["hcp"], 
-            "BS 🚨": int(bs_count)
-        })
-        
-    # Sort by Points
     df_leaderboard = pd.DataFrame(leaderboard).sort_values(by="PTS", ascending=False).reset_index(drop=True)
-    
-    # Adjust index to show Position (POS) starting at 1
     df_leaderboard.index += 1
-    df_leaderboard.index.name = "POS"
-    
     st.dataframe(df_leaderboard, use_container_width=True)
     
     st.markdown("---")
-    
-    st.subheader("Team Matchup")
     g1_points = sum([pts for p, pts in points_dict.items() if PLAYERS[p]["group"] == 1])
     g2_points_raw = sum([pts for p, pts in points_dict.items() if PLAYERS[p]["group"] == 2])
     g2_points_weighted = round(g2_points_raw * (4/3), 1)
@@ -178,13 +173,7 @@ with tab2:
     colA, colB = st.columns(2)
     colA.metric("Group 1 (4-Ball)", f"{g1_points} pts")
     colB.metric("Group 2 (3-Ball)", f"{g2_points_weighted} pts", f"Unweighted: {g2_points_raw}", delta_color="off")
-    st.caption("*Group 2 is weighted by 1.33x to account for the missing player.*")
 
-# --- COURSE INFO TAB ---
 with tab3:
-    st.subheader("Camiral Tour Course")
-    st.write("Yellow Tees - Par & Stroke Index")
     course_df = pd.DataFrame({"Hole": HOLES, "Par": PARS, "S.I.": SIS})
     st.dataframe(course_df.set_index("Hole").T, use_container_width=True)
-
-
