@@ -47,21 +47,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- SECURITY PIN ---
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-
-if not st.session_state.authenticated:
-    st.markdown("<h2 style='text-align: center; color: #005A34;'>🔒 Enter PIN</h2>", unsafe_allow_html=True)
-    pin = st.text_input("Access Code", type="password", placeholder="Hint: Four letter warning...")
-    if st.button("Unlock Scorecard"):
-        if pin.upper() == "FORE":
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("🚨 Incorrect PIN.")
-    st.stop()
-
 # --- COURSE & PLAYER DATA ---
 HOLES = list(range(1, 19))
 PARS = [4, 3, 4, 4, 5, 4, 5, 3, 4,  5, 3, 4, 4, 3, 5, 3, 4, 5]
@@ -105,75 +90,4 @@ with st.expander("📖 How to use this app (Read First)"):
     **3. The BS Button:** If someone cheats, go to the bottom of the Scorecard tab and smash the red button.
     """)
 
-tab1, tab2, tab3 = st.tabs(["📝 Scorecard", "🏆 Leaderboard", "⛳️ Course"])
-
-# --- SCORECARD TAB ---
-with tab1:
-    col1, col2 = st.columns(2)
-    selected_group = col1.radio("Select Group", [1, 2], horizontal=True)
-    selected_hole = col2.selectbox("Select Hole", HOLES)
-    group_players = [p for p, data in PLAYERS.items() if data["group"] == selected_group]
-    
-    with st.form("score_form"):
-        st.markdown(f"**Hole {selected_hole}** | Par {PARS[selected_hole-1]} | SI {SIS[selected_hole-1]}")
-        scores = {}
-        for p in group_players:
-            current_score = db.at[p, selected_hole]
-            val = int(current_score) if current_score > 0 else PARS[selected_hole-1]
-            scores[p] = st.number_input(f"{p}'s Gross Score", min_value=1, max_value=20, value=val)
-        
-        if st.form_submit_button("SAVE SCORES"):
-            with db_lock:
-                for p, s in scores.items():
-                    db.at[p, selected_hole] = s
-            st.success(f"Scores safely locked for Hole {selected_hole}!")
-            
-    st.markdown("---")
-    st.markdown("### 🚨 Penalty & Infractions")
-    bs_player = st.selectbox("Who is talking bullshit?", list(PLAYERS.keys()))
-    if st.button(f"CALL BULLSHIT ON {bs_player.upper()}"):
-        with db_lock:
-            db.at[bs_player, 'bullshit'] += 1
-        st.error(f"🚨 OFFICIAL RULING: BULLSHIT CALLED ON {bs_player.upper()}! 🚨")
-
-# --- LEADERBOARD TAB ---
-with tab2:
-    if st.button("🔄 REFRESH LEADERBOARD"):
-        st.rerun()
-        
-    leaderboard = []
-    points_dict = {}
-    
-    with db_lock:
-        for player in PLAYERS.keys():
-            total_points = 0
-            holes_played = 0
-            for hole in HOLES:
-                gross = db.at[player, hole]
-                if gross > 0:
-                    total_points += calc_stableford(player, hole, gross)
-                    holes_played += 1
-                    
-            points_dict[player] = total_points
-            leaderboard.append({
-                "PLAYER": player, "PTS": total_points,
-                "THRU": str(holes_played) if holes_played < 18 else "F",
-                "HCP": PLAYERS[player]["hcp"], "BS 🚨": int(db.at[player, 'bullshit'])
-            })
-        
-    df_leaderboard = pd.DataFrame(leaderboard).sort_values(by="PTS", ascending=False).reset_index(drop=True)
-    df_leaderboard.index += 1
-    st.dataframe(df_leaderboard, use_container_width=True)
-    
-    st.markdown("---")
-    g1_points = sum([pts for p, pts in points_dict.items() if PLAYERS[p]["group"] == 1])
-    g2_points_raw = sum([pts for p, pts in points_dict.items() if PLAYERS[p]["group"] == 2])
-    g2_points_weighted = round(g2_points_raw * (4/3), 1)
-    
-    colA, colB = st.columns(2)
-    colA.metric("Group 1 (4-Ball)", f"{g1_points} pts")
-    colB.metric("Group 2 (3-Ball)", f"{g2_points_weighted} pts", f"Unweighted: {g2_points_raw}", delta_color="off")
-
-with tab3:
-    course_df = pd.DataFrame({"Hole": HOLES, "Par": PARS, "S.I.": SIS})
-    st.dataframe(course_df.set_index("Hole").T, use_container_width=True)
+tab1
