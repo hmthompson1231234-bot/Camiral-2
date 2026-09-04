@@ -42,17 +42,15 @@ COURSES = {
     }
 }
 
-# THE HANGOVER FAILSAFE:
-# If the server resets overnight and wipes Camiral's scores, 
-# just type your final Round 1 points/gross in here tomorrow morning!
+# HANGOVER FAILSAFE ACTIVATED: Camiral Round 1 Scores Locked In
 PLAYERS = {
-    "Tommy":  {"hcp": 14, "group": 1, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
-    "Hidde":  {"hcp": 15, "group": 1, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
-    "Weeman": {"hcp": 20, "group": 1, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
-    "Brad":   {"hcp": 22, "group": 1, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
-    "Harry":  {"hcp": 14, "group": 2, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
-    "James":  {"hcp": 16, "group": 2, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
-    "Ted":    {"hcp": 22, "group": 2, "r1_points": 0, "r1_gross": 0, "r1_bs": 0}
+    "Tommy":  {"hcp": 14, "group": 1, "r1_points": 30, "r1_gross": 0, "r1_bs": 2},
+    "Hidde":  {"hcp": 15, "group": 1, "r1_points": 29, "r1_gross": 0, "r1_bs": 0},
+    "Weeman": {"hcp": 20, "group": 1, "r1_points": 23, "r1_gross": 0, "r1_bs": 0},
+    "Brad":   {"hcp": 22, "group": 1, "r1_points": 18, "r1_gross": 0, "r1_bs": 0},
+    "Harry":  {"hcp": 14, "group": 2, "r1_points": 35, "r1_gross": 0, "r1_bs": 0},
+    "Ted":    {"hcp": 22, "group": 2, "r1_points": 32, "r1_gross": 0, "r1_bs": 0},
+    "James":  {"hcp": 16, "group": 2, "r1_points": 20, "r1_gross": 0, "r1_bs": 0}
 }
 
 @st.cache_resource
@@ -84,9 +82,6 @@ def calc_stableford(player, hole, gross, course_pars, course_sis):
     extra_strokes = (hcp // 18) + (1 if (hcp % 18) >= si else 0)
     net_score = gross - extra_strokes
     return max(0, par - net_score + 2)
-
-with st.expander("📖 READ THIS FOR TOMORROW"):
-    st.write("⚠️ **CRITICAL:** Take a screenshot of the final leaderboard when you finish Camiral today! If the server goes to sleep overnight, you will need to manually punch those totals into the code on GitHub tomorrow morning so the Overall Weekend Leaderboard works at Peralada.")
 
 tab1, tab2, tab3 = st.tabs(["📝 Scorecard", "🏆 Leaderboards", "⛳️ Course"])
 
