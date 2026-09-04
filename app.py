@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import threading
 
-st.set_page_config(page_title="Camiral Invitational '26", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Girona Invitational '26", layout="centered", initial_sidebar_state="collapsed")
 
 # --- BULLETPROOF MASTERS CSS ---
 st.markdown("""
@@ -12,23 +12,15 @@ st.markdown("""
     h1, h2, h3 { color: #005A34 !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 700; }
     h1 { border-bottom: 3px solid #EAD15F !important; padding-bottom: 10px; }
     .stTextInput input, .stNumberInput input, div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important;
-        color: #111111 !important;
-        border: 1px solid #005A34 !important;
-        border-radius: 4px !important;
+        background-color: #FFFFFF !important; color: #111111 !important;
+        border: 1px solid #005A34 !important; border-radius: 4px !important;
     }
     .stButton>button { 
-        background-color: #005A34 !important; 
-        color: white !important; 
-        border-radius: 6px !important; 
-        font-weight: bold !important; 
-        border: 1px solid #005A34 !important;
-        width: 100%;
+        background-color: #005A34 !important; color: white !important; 
+        border-radius: 6px !important; font-weight: bold !important; 
+        border: 1px solid #005A34 !important; width: 100%;
     }
-    .stButton>button:active {
-        background-color: #EAD15F !important;
-        color: #005A34 !important;
-    }
+    .stButton>button:active { background-color: #EAD15F !important; color: #005A34 !important; }
     .stButton:last-of-type>button { background-color: #D32F2F !important; border-color: #D32F2F !important; }
     [data-testid="stDataFrame"] { background-color: #FFFFFF !important; border-radius: 8px; border: 1px solid #005A34; }
 </style>
@@ -36,13 +28,31 @@ st.markdown("""
 
 # --- COURSE & PLAYER DATA ---
 HOLES = list(range(1, 19))
-PARS = [4, 3, 4, 4, 5, 4, 5, 3, 4,  5, 3, 4, 4, 3, 5, 3, 4, 5]
-SIS  = [14, 18, 6, 2, 16, 12, 8, 4, 10,  9, 7, 11, 1, 13, 5, 17, 3, 15]
 
+COURSES = {
+    "Round 1: Camiral Tour": {
+        "key": "camiral",
+        "pars": [4, 3, 4, 4, 5, 4, 5, 3, 4,  5, 3, 4, 4, 3, 5, 3, 4, 5],
+        "sis":  [14, 18, 6, 2, 16, 12, 8, 4, 10,  9, 7, 11, 1, 13, 5, 17, 3, 15]
+    },
+    "Round 2: Peralada": {
+        "key": "peralada",
+        "pars": [4, 4, 4, 5, 4, 3, 5, 4, 3,  4, 4, 3, 5, 3, 4, 4, 5, 3],
+        "sis":  [18, 2, 8, 16, 6, 4, 10, 14, 12, 11, 9, 13, 5, 17, 7, 1, 3, 15]
+    }
+}
+
+# THE HANGOVER FAILSAFE:
+# If the server resets overnight and wipes Camiral's scores, 
+# just type your final Round 1 points/gross in here tomorrow morning!
 PLAYERS = {
-    "Tommy": {"hcp": 14, "group": 1}, "Hidde": {"hcp": 15, "group": 1},
-    "Weeman": {"hcp": 20, "group": 1}, "Brad": {"hcp": 22, "group": 1},
-    "Harry": {"hcp": 14, "group": 2}, "James": {"hcp": 16, "group": 2}, "Ted": {"hcp": 22, "group": 2}
+    "Tommy":  {"hcp": 14, "group": 1, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
+    "Hidde":  {"hcp": 15, "group": 1, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
+    "Weeman": {"hcp": 20, "group": 1, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
+    "Brad":   {"hcp": 22, "group": 1, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
+    "Harry":  {"hcp": 14, "group": 2, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
+    "James":  {"hcp": 16, "group": 2, "r1_points": 0, "r1_gross": 0, "r1_bs": 0},
+    "Ted":    {"hcp": 22, "group": 2, "r1_points": 0, "r1_gross": 0, "r1_bs": 0}
 }
 
 @st.cache_resource
@@ -50,30 +60,35 @@ def get_score_db():
     cols = HOLES + ['bullshit']
     return {
         "lock": threading.Lock(), 
-        "data": pd.DataFrame(index=list(PLAYERS.keys()), columns=cols).fillna(0)
+        "camiral": pd.DataFrame(index=list(PLAYERS.keys()), columns=cols).fillna(0),
+        "peralada": pd.DataFrame(index=list(PLAYERS.keys()), columns=cols).fillna(0)
     }
 
 db_wrapper = get_score_db()
-db = db_wrapper["data"]
 db_lock = db_wrapper["lock"]
 
-def calc_stableford(player, hole, gross):
-    if gross <= 0:
-        return 0
+# --- APP HEADER ---
+st.title("⛳️ GIRONA INVITATIONAL")
+
+active_course_name = st.selectbox("📍 Select Current Round", list(COURSES.keys()))
+active_course_data = COURSES[active_course_name]
+db = db_wrapper[active_course_data["key"]]
+PARS = active_course_data["pars"]
+SIS = active_course_data["sis"]
+
+def calc_stableford(player, hole, gross, course_pars, course_sis):
+    if gross <= 0: return 0
     hcp = PLAYERS[player]["hcp"]
-    par = PARS[hole-1]
-    si = SIS[hole-1]
+    par = course_pars[hole-1]
+    si = course_sis[hole-1]
     extra_strokes = (hcp // 18) + (1 if (hcp % 18) >= si else 0)
     net_score = gross - extra_strokes
     return max(0, par - net_score + 2)
 
-# --- APP HEADER ---
-st.title("⛳️ CAMIRAL INVITATIONAL")
+with st.expander("📖 READ THIS FOR TOMORROW"):
+    st.write("⚠️ **CRITICAL:** Take a screenshot of the final leaderboard when you finish Camiral today! If the server goes to sleep overnight, you will need to manually punch those totals into the code on GitHub tomorrow morning so the Overall Weekend Leaderboard works at Peralada.")
 
-with st.expander("📖 How to use this app (Read First)"):
-    st.write("1. Scoring: Select group, select hole, log gross strokes. Math is automatic.\n2. Leaderboard: Check live standings.\n3. The BS Button: Bottom of scorecard.")
-
-tab1, tab2, tab3 = st.tabs(["📝 Scorecard", "🏆 Leaderboard", "⛳️ Course"])
+tab1, tab2, tab3 = st.tabs(["📝 Scorecard", "🏆 Leaderboards", "⛳️ Course"])
 
 # --- SCORECARD TAB ---
 with tab1:
@@ -94,7 +109,7 @@ with tab1:
             with db_lock:
                 for p, s in scores.items():
                     db.at[p, selected_hole] = s
-            st.success(f"Scores safely locked for Hole {selected_hole}!")
+            st.success(f"Scores locked for Hole {selected_hole} at {active_course_name}!")
             
     st.markdown("---")
     st.markdown("### 🚨 Penalty & Infractions")
@@ -106,7 +121,9 @@ with tab1:
 
 # --- LEADERBOARD TAB ---
 with tab2:
-    if st.button("🔄 REFRESH LEADERBOARD"):
+    lb_view = st.radio("Select Leaderboard:", ["Current Round", "Overall Weekend"], horizontal=True)
+    
+    if st.button("🔄 REFRESH LEADERBOARDS"):
         st.rerun()
         
     leaderboard = []
@@ -114,34 +131,64 @@ with tab2:
     
     with db_lock:
         for player in PLAYERS.keys():
-            total_points = 0
+            # Current Round Calcs
+            round_pts = 0
+            round_gross = 0
             holes_played = 0
+            
             for hole in HOLES:
                 gross = db.at[player, hole]
                 if gross > 0:
-                    total_points += calc_stableford(player, hole, gross)
+                    round_pts += calc_stableford(player, hole, gross, PARS, SIS)
+                    round_gross += gross
                     holes_played += 1
-                    
-            points_dict[player] = total_points
-            leaderboard.append({
-                "PLAYER": player, "PTS": total_points,
-                "THRU": str(holes_played) if holes_played < 18 else "F",
-                "HCP": PLAYERS[player]["hcp"], "BS 🚨": int(db.at[player, 'bullshit'])
-            })
+            
+            # Overall Calcs (combining both databases + hangover failsafe)
+            overall_pts = PLAYERS[player]["r1_points"]
+            overall_gross = PLAYERS[player]["r1_gross"]
+            overall_bs = PLAYERS[player]["r1_bs"]
+            
+            # Add what is currently in memory for both courses
+            for c_name, c_data in COURSES.items():
+                c_db = db_wrapper[c_data["key"]]
+                for hole in HOLES:
+                    g = c_db.at[player, hole]
+                    if g > 0:
+                        overall_pts += calc_stableford(player, hole, g, c_data["pars"], c_data["sis"])
+                        overall_gross += g
+            
+            overall_bs += int(db_wrapper["camiral"].at[player, 'bullshit']) + int(db_wrapper["peralada"].at[player, 'bullshit'])
+
+            if lb_view == "Current Round":
+                points_dict[player] = round_pts
+                leaderboard.append({
+                    "PLAYER": player, "PTS": round_pts, "GROSS": int(round_gross),
+                    "THRU": str(holes_played) if holes_played < 18 else "F",
+                    "BS 🚨": int(db.at[player, 'bullshit'])
+                })
+            else:
+                points_dict[player] = overall_pts
+                leaderboard.append({
+                    "PLAYER": player, "TOTAL PTS": overall_pts, "TOTAL GROSS": int(overall_gross),
+                    "HCP": PLAYERS[player]["hcp"], "TOTAL BS 🚨": int(overall_bs)
+                })
         
-    df_leaderboard = pd.DataFrame(leaderboard).sort_values(by="PTS", ascending=False).reset_index(drop=True)
+    sort_col = "PTS" if lb_view == "Current Round" else "TOTAL PTS"
+    df_leaderboard = pd.DataFrame(leaderboard).sort_values(by=sort_col, ascending=False).reset_index(drop=True)
     df_leaderboard.index += 1
     st.dataframe(df_leaderboard, use_container_width=True)
     
     st.markdown("---")
+    st.markdown(f"### Team Matchup ({lb_view})")
     g1_points = sum([pts for p, pts in points_dict.items() if PLAYERS[p]["group"] == 1])
     g2_points_raw = sum([pts for p, pts in points_dict.items() if PLAYERS[p]["group"] == 2])
     g2_points_weighted = round(g2_points_raw * (4/3), 1)
     
     colA, colB = st.columns(2)
     colA.metric("Group 1 (4-Ball)", f"{g1_points} pts")
-    colB.metric("Group 2 (3-Ball)", f"{g2_points_weighted} pts", f"Unweighted: {g2_points_raw}", delta_color="off")
+    colB.metric("Group 2 (3-Ball)", f"{g2_points_weighted} pts", f"Raw: {g2_points_raw}", delta_color="off")
 
 with tab3:
+    st.markdown(f"**{active_course_name}**")
     course_df = pd.DataFrame({"Hole": HOLES, "Par": PARS, "S.I.": SIS})
     st.dataframe(course_df.set_index("Hole").T, use_container_width=True)
